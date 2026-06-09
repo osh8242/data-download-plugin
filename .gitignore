@@ -1,0 +1,13 @@
+.gradle
+build
+.idea
+*.log
+local.properties
+.DS_Store
+*.zip
+*.jar
+*.class
+gradle-8.5
+gradle-8.5-bin.zip
+out
+.intellijPlatform/
