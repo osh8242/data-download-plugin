@@ -24,7 +24,7 @@ dependencies {
     
     intellijPlatform {
         // Target DataGrip
-        datagrip("2023.3")
+        datagrip("2024.1")
         
         // Target Database Tools plugin
         bundledPlugin("com.intellij.database")
@@ -45,7 +45,7 @@ intellijPlatform {
         
         ideaVersion {
             sinceBuild.set("233")
-            untilBuild.set("233.*")
+            untilBuild.set("243.*")
         }
     }
     

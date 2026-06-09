@@ -63,7 +63,23 @@ object DownloadExecutor {
                     LOG.info("DataDownloadPlugin: Establishing database connection to data source [${dataSource.name}]")
                     
                     val connectionManager = DatabaseConnectionManager.getInstance()
-                    val connectionRef = connectionManager.build(project, dataSource).create()
+                    val builder = connectionManager.build(project, dataSource)
+                    val builderClass = builder.javaClass
+                    
+                    // Check for createBlocking() method introduced in 2024.1
+                    val createBlockingMethod = try {
+                        builderClass.getMethod("createBlocking")
+                    } catch (e: NoSuchMethodException) {
+                        null
+                    }
+                    
+                    @Suppress("UNCHECKED_CAST")
+                    val connectionRef = if (createBlockingMethod != null) {
+                        createBlockingMethod.invoke(builder) as? com.intellij.database.util.GuardedRef<com.intellij.database.dataSource.DatabaseConnection>
+                    } else {
+                        val createMethod = builderClass.getMethod("create")
+                        createMethod.invoke(builder) as? com.intellij.database.util.GuardedRef<com.intellij.database.dataSource.DatabaseConnection>
+                    }
                     
                     if (connectionRef == null) {
                         throw IllegalStateException("Failed to create database connection reference (connectionRef is null)")
