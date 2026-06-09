@@ -1,7 +1,7 @@
 <idea-plugin>
-    <id>com.github.plugin.datadownload</id>
+    <id>com.github.osh8242.datadownload</id>
     <name>DataGrip Dataset Downloader</name>
-    <vendor email="support@example.com" url="https://github.com/osh8242/data-download-plugin">Company</vendor>
+    <vendor email="osh8242@naver.com" url="https://github.com/osh8242">osh8242</vendor>
 
     <description><![CDATA[
     DataGrip plugin to download datasets as CSV/XLSX using database connection profiles.
