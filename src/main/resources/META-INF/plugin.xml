@@ -4,7 +4,31 @@
     <vendor email="osh8242@naver.com" url="https://github.com/osh8242">osh8242</vendor>
 
     <description><![CDATA[
-    DataGrip plugin to download datasets as CSV/XLSX using database connection profiles.
+    <h3>Dataset Downloader - Streamlined Database Table Exports</h3>
+    <p>A lightweight, high-performance database table exporter for DataGrip and IntelliJ Database Tools. Configure download profiles for your schemas and tables to download them as CSV or Excel (XLSX) files in a single click.</p>
+
+    <h4>Key Features:</h4>
+    <ul>
+        <li><b>One-Click Exports:</b> Save target schemas, tables, and paths as profiles to run downloads instantly.</li>
+        <li><b>High-Performance Excel Engine:</b> Powered by the ultra-lightweight <code>fastexcel</code> library, reducing memory usage and packaging overhead.</li>
+        <li><b>OOM Prevention:</b> Handles millions of rows using streaming query cursors and transactional batch fetches.</li>
+        <li><b>Inline Profile Editor:</b> Manage profiles directly in the grid tool window without interrupting popups.</li>
+        <li><b>Context-Aware Execution:</b> Run, edit, or delete profiles directly via a convenient right-click context menu.</li>
+        <li><b>Quick Navigation:</b> Click the "Open Folder" button in the download-complete notification balloon to locate your files instantly.</li>
+    </ul>
+
+    <h4>Supported Formats:</h4>
+    <ul>
+        <li><b>CSV:</b> Standard CSV format with UTF-8 BOM, ensuring Korean and other non-ASCII characters display correctly in MS Excel.</li>
+        <li><b>XLSX:</b> Pure Excel spreadsheets built via a zero-overhead stream writer.</li>
+    </ul>
+
+    <h4>How to Use:</h4>
+    <ol>
+        <li>Open the <b>Data Downloader</b> panel on the right sidebar.</li>
+        <li>Click <b>Add Profile</b> to register your Data Source, Schema, Table, and output directory.</li>
+        <li>Right-click any profile in the table to execute the download process.</li>
+    </ol>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
