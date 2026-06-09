@@ -2,6 +2,7 @@ plugins {
     id("java")
     kotlin("jvm") version "1.9.22"
     id("org.jetbrains.intellij.platform") version "2.1.0"
+    id("org.jetbrains.changelog") version "2.2.0"
 }
 
 group = "com.github.plugin"
@@ -46,6 +47,13 @@ intellijPlatform {
             sinceBuild.set("233")
             untilBuild.set("263.*")
         }
+        
+        changeNotes.set(provider {
+            changelog.renderItem(
+                changelog.get(project.version.toString()).withHeader(false).withEmptySections(false),
+                org.jetbrains.changelog.Changelog.OutputType.HTML
+            )
+        })
     }
     
     publishing {
