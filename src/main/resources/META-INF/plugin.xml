@@ -1,0 +1,27 @@
+<idea-plugin>
+    <id>com.github.plugin.datadownload</id>
+    <name>DataGrip Dataset Downloader</name>
+    <vendor email="support@example.com" url="https://github.com/osh8242/data-download-plugin">Company</vendor>
+
+    <description><![CDATA[
+    DataGrip plugin to download datasets as CSV/XLSX using database connection profiles.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.database</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Persistent Config Storage -->
+        <projectService serviceImplementation="com.github.plugin.datadownload.config.DataDownloadConfig"/>
+        
+        <!-- ToolWindow on the right side -->
+        <toolWindow id="Data Downloader" 
+                    anchor="right" 
+                    factoryClass="com.github.plugin.datadownload.ui.DataDownloadToolWindowFactory"
+                    icon="AllIcons.Actions.Download"/>
+    </extensions>
+
+    <actions>
+        <!-- Actions are handled programmatically within the ToolWindow -->
+    </actions>
+</idea-plugin>
