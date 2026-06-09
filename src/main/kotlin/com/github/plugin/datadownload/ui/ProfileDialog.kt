@@ -32,9 +32,16 @@ class ProfileDialog(
     init {
         title = if (profileToEdit == null) "Add Download Profile" else "Edit Download Profile"
         
-        // Configure custom renderer to show user-friendly name instead of object string
-        dataSourceCombo.setRenderer(com.intellij.ui.SimpleListCellRenderer.create("") { dataSource ->
-            dataSource?.name ?: ""
+        dataSourceCombo.setRenderer(object : com.intellij.ui.SimpleListCellRenderer<LocalDataSource>() {
+            override fun customize(
+                list: javax.swing.JList<out LocalDataSource>,
+                value: LocalDataSource?,
+                index: Int,
+                selected: Boolean,
+                hasFocus: Boolean
+            ) {
+                text = value?.name ?: ""
+            }
         })
 
         // Load data sources (sorted alphabetically by name)
