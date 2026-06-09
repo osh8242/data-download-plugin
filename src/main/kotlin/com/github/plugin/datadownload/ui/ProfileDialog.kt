@@ -37,8 +37,9 @@ class ProfileDialog(
             dataSource?.name ?: ""
         })
 
-        // Load data sources
+        // Load data sources (sorted alphabetically by name)
         val dataSources = LocalDataSourceManager.getInstance(project).dataSources
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         dataSources.forEach { dataSourceCombo.addItem(it) }
         
         // Select current if editing

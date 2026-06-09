@@ -85,9 +85,11 @@ class DataDownloadToolWindowFactory : ToolWindowFactory {
             table.putClientProperty("terminateEditOnFocusLost", java.lang.Boolean.TRUE)
             refreshProfiles()
             
-            // Configure DataSource ComboBox Editor
+            // Configure DataSource ComboBox Editor (sorted alphabetically by name)
             val dsManager = com.intellij.database.dataSource.LocalDataSourceManager.getInstance(project)
-            val dsCombo = com.intellij.openapi.ui.ComboBox(dsManager.dataSources.toTypedArray())
+            val sortedDataSources = dsManager.dataSources
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            val dsCombo = com.intellij.openapi.ui.ComboBox(sortedDataSources.toTypedArray())
             dsCombo.setRenderer(com.intellij.ui.SimpleListCellRenderer.create("") { it?.name ?: "" })
             table.columnModel.getColumn(1).cellEditor = javax.swing.DefaultCellEditor(dsCombo)
 
