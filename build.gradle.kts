@@ -20,7 +20,7 @@ dependencies {
     implementation("org.apache.commons:commons-csv:1.10.0")
     
     // fastexcel for lightweight CSV to Excel conversion
-    implementation("org.dhatim:fastexcel:0.18.4")
+    implementation("org.dhatim:fastexcel:0.20.1")
     
     intellijPlatform {
         // Target DataGrip

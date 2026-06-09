@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4]
+### Changed
+- Upgraded fastexcel library version from 0.18.4 to 0.20.1.
+  - Improved data conversion performance, particularly for date/time (temporal) and column calculations.
+  - Added support for rich inline text formatting via the new `Worksheet.inlineString` API.
+  - Upgraded internal XML parser (aalto-xml) and commons-io dependencies for safety.
+
 ## [1.0.3]
 ### Fixed
 - Migrated Excel generation library from Apache POI to fastexcel.
