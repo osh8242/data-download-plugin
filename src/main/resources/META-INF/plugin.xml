@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.github.osh8242.datadownload</id>
-    <name>DataGrip Dataset Downloader</name>
+    <name>Dataset Downloader for DataGrip</name>
     <vendor email="osh8242@naver.com" url="https://github.com/osh8242">osh8242</vendor>
 
     <description><![CDATA[

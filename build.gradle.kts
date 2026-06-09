@@ -39,7 +39,7 @@ kotlin {
 
 intellijPlatform {
     pluginConfiguration {
-        name.set("DataGrip Dataset Downloader")
+        name.set("Dataset Downloader for DataGrip")
         id.set("com.github.plugin.datadownload")
         version.set(project.version.toString())
         
