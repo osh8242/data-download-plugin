@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.5]
+### Changed
+- Renamed default Excel worksheet name from "Dataset" to "data".
+### Fixed
+- Implemented automatic worksheet rollover (every 1,000,000 rows) to prevent IllegalArgumentException when downloading large datasets.
+- Resolved remaining scheduled-for-removal SimpleListCellRenderer warning in tool window.
+
 ## [1.0.4]
 ### Changed
 - Upgraded fastexcel library version from 0.18.4 to 0.20.1.
