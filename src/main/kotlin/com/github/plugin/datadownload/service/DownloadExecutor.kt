@@ -242,14 +242,21 @@ object DownloadExecutor {
     private fun convertCsvToXlsx(csvFile: File, xlsxFile: File) {
         FileOutputStream(xlsxFile).use { fos ->
             val workbook = Workbook(fos, "DatasetDownloader", "1.0")
-            val sheet = workbook.newWorksheet("Dataset")
+            var sheetIndex = 1
+            var currentSheet = workbook.newWorksheet("data")
             
             FileReader(csvFile, StandardCharsets.UTF_8).use { reader ->
                 val parser = CSVParser(reader, CSVFormat.DEFAULT)
                 var rowNum = 0
                 for (csvRecord in parser) {
+                    // Rollover worksheet every 1,000,000 rows to prevent physical Excel limit crashes
+                    if (rowNum >= 1000000) {
+                        sheetIndex++
+                        currentSheet = workbook.newWorksheet("data_$sheetIndex")
+                        rowNum = 0
+                    }
                     for (i in 0 until csvRecord.size()) {
-                        sheet.value(rowNum, i, csvRecord.get(i))
+                        currentSheet.value(rowNum, i, csvRecord.get(i))
                     }
                     rowNum++
                 }
