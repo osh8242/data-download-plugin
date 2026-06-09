@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.plugin"
-version = "1.0.2"
+version = "1.0.3"
 
 repositories {
     mavenCentral()
@@ -18,9 +18,8 @@ dependencies {
     // CSV writer
     implementation("org.apache.commons:commons-csv:1.10.0")
     
-    // Apache POI for CSV to Excel conversion
-    implementation("org.apache.poi:poi:5.2.5")
-    implementation("org.apache.poi:poi-ooxml:5.2.5")
+    // fastexcel for lightweight CSV to Excel conversion
+    implementation("org.dhatim:fastexcel:0.18.4")
     
     intellijPlatform {
         // Target DataGrip
