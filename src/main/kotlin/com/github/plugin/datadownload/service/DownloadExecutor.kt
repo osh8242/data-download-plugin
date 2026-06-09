@@ -48,12 +48,11 @@ object DownloadExecutor {
                     dir.mkdirs()
                 }
 
-                val timestamp = System.currentTimeMillis()
                 val isXlsx = profile.exportFormat.equals("XLSX", ignoreCase = true)
                 val csvFile = if (isXlsx) {
-                    File(dir, "${profile.name}_temp_$timestamp.csv")
+                    File(dir, "${profile.tableName}_temp.csv")
                 } else {
-                    File(dir, "${profile.name}_$timestamp.csv")
+                    File(dir, "${profile.tableName}.csv")
                 }
                 
                 val sql = "SELECT * FROM ${profile.schemaName}.${profile.tableName}"
@@ -180,7 +179,7 @@ object DownloadExecutor {
                     if (isXlsx) {
                         indicator.text = "Converting CSV to XLSX..."
                         LOG.info("DataDownloadPlugin: Converting temp CSV to Excel...")
-                        val xlsxFile = File(dir, "${profile.name}_$timestamp.xlsx")
+                        val xlsxFile = File(dir, "${profile.tableName}.xlsx")
                         try {
                             convertCsvToXlsx(csvFile, xlsxFile)
                             csvFile.delete() // Remove the intermediate CSV file
