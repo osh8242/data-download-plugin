@@ -52,12 +52,8 @@ class ProfileDialog(
         }
         
         pathField.text = profileToEdit?.downloadPath ?: ""
-        pathField.addBrowseFolderListener(
-            "Select Download Directory",
-            null,
-            project,
-            FileChooserDescriptorFactory.createSingleFolderDescriptor()
-        )
+        val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor().withTitle("Select Download Directory")
+        pathField.addBrowseFolderListener(com.intellij.openapi.ui.TextBrowseFolderListener(descriptor, project))
 
         init()
     }
