@@ -16,7 +16,7 @@ import com.intellij.notification.Notifications
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
-import org.apache.poi.xssf.streaming.SXSSFWorkbook
+import org.dhatim.fastexcel.Workbook
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -241,26 +241,23 @@ object DownloadExecutor {
     }
 
     private fun convertCsvToXlsx(csvFile: File, xlsxFile: File) {
-        val workbook = SXSSFWorkbook(100)
-        val sheet = workbook.createSheet("Dataset")
-        
-        FileReader(csvFile, StandardCharsets.UTF_8).use { reader ->
-            val parser = CSVParser(reader, CSVFormat.DEFAULT)
-            var rowNum = 0
-            for (csvRecord in parser) {
-                val row = sheet.createRow(rowNum++)
-                for (i in 0 until csvRecord.size()) {
-                    val cell = row.createCell(i)
-                    cell.setCellValue(csvRecord.get(i))
-                }
-            }
-            parser.close()
-        }
-
         FileOutputStream(xlsxFile).use { fos ->
-            workbook.write(fos)
+            val workbook = Workbook(fos, "DatasetDownloader", "1.0")
+            val sheet = workbook.newWorksheet("Dataset")
+            
+            FileReader(csvFile, StandardCharsets.UTF_8).use { reader ->
+                val parser = CSVParser(reader, CSVFormat.DEFAULT)
+                var rowNum = 0
+                for (csvRecord in parser) {
+                    for (i in 0 until csvRecord.size()) {
+                        sheet.value(rowNum, i, csvRecord.get(i))
+                    }
+                    rowNum++
+                }
+                parser.close()
+            }
+            workbook.finish()
         }
-        workbook.dispose()
     }
 
     private fun showNotification(project: Project, title: String, content: String, type: NotificationType, file: File? = null) {
