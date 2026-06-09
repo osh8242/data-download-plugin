@@ -48,4 +48,8 @@ intellijPlatform {
             untilBuild.set("243.*")
         }
     }
+    
+    publishing {
+        token.set(providers.environmentVariable("PUBLISH_TOKEN"))
+    }
 }

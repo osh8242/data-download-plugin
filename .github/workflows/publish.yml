@@ -29,4 +29,4 @@ jobs:
       - name: Publish Plugin to Marketplace
         env:
           PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
-        run: ./gradlew publishPlugin --token "$PUBLISH_TOKEN"
+        run: ./gradlew publishPlugin
