@@ -90,7 +90,17 @@ class DataDownloadToolWindowFactory : ToolWindowFactory {
             val sortedDataSources = dsManager.dataSources
                 .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             val dsCombo = com.intellij.openapi.ui.ComboBox(sortedDataSources.toTypedArray())
-            dsCombo.setRenderer(com.intellij.ui.SimpleListCellRenderer.create("") { it?.name ?: "" })
+            dsCombo.setRenderer(object : com.intellij.ui.SimpleListCellRenderer<com.intellij.database.dataSource.LocalDataSource>() {
+                override fun customize(
+                    list: javax.swing.JList<out com.intellij.database.dataSource.LocalDataSource>,
+                    value: com.intellij.database.dataSource.LocalDataSource?,
+                    index: Int,
+                    selected: Boolean,
+                    hasFocus: Boolean
+                ) {
+                    text = value?.name ?: ""
+                }
+            })
             table.columnModel.getColumn(1).cellEditor = javax.swing.DefaultCellEditor(dsCombo)
 
             // Configure Format ComboBox Editor
