@@ -62,7 +62,22 @@ object DownloadExecutor {
                     indicator.text = "Connecting to database..."
                     LOG.info("DataDownloadPlugin: Establishing database connection to data source [${dataSource.name}]")
                     
-                    val connectionManager = DatabaseConnectionManager.getInstance()
+                    val connectionManager = try {
+                        // 1) Attempt Java static method directly (2023.3 legacy format)
+                        val getInstanceMethod = DatabaseConnectionManager::class.java.getMethod("getInstance")
+                        getInstanceMethod.invoke(null) as DatabaseConnectionManager
+                    } catch (e: Exception) {
+                        try {
+                            // 2) Fallback to Kotlin Companion class resolution (2024.1+ format)
+                            val companionField = DatabaseConnectionManager::class.java.getField("Companion")
+                            val companionObj = companionField.get(null)
+                            val getInstanceMethod = companionObj.javaClass.getMethod("getInstance")
+                            getInstanceMethod.invoke(companionObj) as DatabaseConnectionManager
+                        } catch (ex: Exception) {
+                            // 3) Final fallback to compiler bound lookup
+                            DatabaseConnectionManager.getInstance()
+                        }
+                    }
                     val builder = connectionManager.build(project, dataSource)
                     val builderClass = builder.javaClass
                     
