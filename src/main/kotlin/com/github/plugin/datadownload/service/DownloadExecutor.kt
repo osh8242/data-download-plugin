@@ -74,8 +74,7 @@ object DownloadExecutor {
                             val getInstanceMethod = companionObj.javaClass.getMethod("getInstance")
                             getInstanceMethod.invoke(companionObj) as DatabaseConnectionManager
                         } catch (ex: Exception) {
-                            // 3) Final fallback to compiler bound lookup
-                            DatabaseConnectionManager.getInstance()
+                            throw IllegalStateException("Failed to resolve DatabaseConnectionManager instance via reflection", ex)
                         }
                     }
                     val builder = connectionManager.build(project, dataSource)
