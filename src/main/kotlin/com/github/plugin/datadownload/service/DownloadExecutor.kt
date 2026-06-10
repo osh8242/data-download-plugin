@@ -17,10 +17,12 @@ import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
 import org.dhatim.fastexcel.Workbook
+import java.io.BufferedOutputStream
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileOutputStream
 import java.io.FileReader
 import java.io.FileWriter
-import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 
 object DownloadExecutor {
@@ -116,10 +118,16 @@ object DownloadExecutor {
                                 LOG.warn("DataDownloadPlugin: Failed to set autoCommit to false: ${e.message}")
                             }
 
+                            val dbProductName = try { remoteConnection.metaData.databaseProductName.lowercase() } catch (e: Exception) { "" }
                             stmt = remoteConnection.prepareStatement(sql)
                             try {
-                                stmt.fetchSize = 10000
-                                LOG.info("DataDownloadPlugin: Set fetchSize to 10000")
+                                if (dbProductName.contains("mysql") || dbProductName.contains("mariadb")) {
+                                    stmt.fetchSize = Integer.MIN_VALUE
+                                    LOG.info("DataDownloadPlugin: Set fetchSize to Integer.MIN_VALUE for MySQL/MariaDB streaming")
+                                } else {
+                                    stmt.fetchSize = 10000
+                                    LOG.info("DataDownloadPlugin: Set fetchSize to 10000")
+                                }
                             } catch (e: Exception) {
                                 LOG.warn("DataDownloadPlugin: Failed to set fetchSize: ${e.message}")
                             }
@@ -127,112 +135,165 @@ object DownloadExecutor {
                             rs = stmt.executeQuery()
                             val meta = rs.metaData
                             val columnCount = meta.columnCount
+
+                            // Cache column types to avoid repetitive getType/instanceof checks
+                            val columnTypes = IntArray(columnCount + 1)
+                            for (i in 1..columnCount) {
+                                columnTypes[i] = meta.getColumnType(i)
+                            }
                             LOG.info("DataDownloadPlugin: Query executed successfully. Column count: $columnCount")
 
-                            if (isXlsx) {
-                                indicator.text = "Executing query and writing to XLSX..."
-                                val xlsxFile = File(dir, "${profile.tableName}.xlsx")
-                                FileOutputStream(xlsxFile).use { fos ->
-                                    val workbook = Workbook(fos, "DatasetDownloader", "1.0")
-                                    var sheetIndex = 1
-                                    var currentSheet = workbook.newWorksheet("data")
-                                    
-                                    // Write headers
-                                    for (i in 1..columnCount) {
-                                        currentSheet.value(0, i - 1, meta.getColumnName(i))
-                                    }
-                                    
-                                    // Write rows
-                                    var totalRowCount = 0
-                                    var sheetRowNum = 1
-                                    
-                                    while (rs.next()) {
-                                        if (indicator.isCanceled) {
-                                            LOG.warn("DataDownloadPlugin: Download canceled by user at row $totalRowCount")
-                                            break
-                                        }
-                                        
-                                        // Rollover worksheet every 1,000,000 rows to prevent physical Excel limit crashes
-                                        // Header row is at index 0 of every worksheet. So max data rows is 999,999 per sheet
-                                        if (sheetRowNum >= 1000000) {
-                                            sheetIndex++
-                                            currentSheet = workbook.newWorksheet("data_$sheetIndex")
-                                            
-                                            // Write headers for new sheet
-                                            for (i in 1..columnCount) {
-                                                currentSheet.value(0, i - 1, meta.getColumnName(i))
-                                            }
-                                            sheetRowNum = 1
-                                        }
-                                        
-                                        for (i in 1..columnCount) {
-                                            val value = rs.getObject(i)
-                                            if (value != null) {
-                                                // Handle data type mappings safely
-                                                when (value) {
-                                                    is Number -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    is Boolean -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    is String -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    is java.time.LocalDateTime -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    is java.time.LocalDate -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    is java.util.Date -> currentSheet.value(sheetRowNum, i - 1, value)
-                                                    else -> currentSheet.value(sheetRowNum, i - 1, value.toString())
-                                                }
-                                            }
-                                            // Null value is left empty
-                                        }
-                                        
-                                        sheetRowNum++
-                                        totalRowCount++
-                                        
-                                        if (totalRowCount % 1000 == 0) {
-                                            indicator.text = "Writing rows to XLSX ($totalRowCount written)..."
-                                            if (totalRowCount % 10000 == 0) {
-                                                LOG.info("DataDownloadPlugin: Written $totalRowCount rows to XLSX...")
-                                            }
-                                        }
-                                    }
-                                    workbook.finish()
-                                    LOG.info("DataDownloadPlugin: Finished writing XLSX. Total rows written: $totalRowCount")
-                                }
-                            } else {
-                                indicator.text = "Executing query and writing to CSV..."
-                                if (csvFile != null) {
-                                    FileWriter(csvFile, StandardCharsets.UTF_8).use { writer ->
-                                        writer.write("\uFEFF") // Write UTF-8 BOM for CSV format to support Excel natively
-                                        CSVPrinter(writer, CSVFormat.DEFAULT).use { csvPrinter ->
-                                            // Write headers
-                                            val headers = mutableListOf<String>()
-                                            for (i in 1..columnCount) {
-                                                headers.add(meta.getColumnName(i))
-                                            }
-                                            csvPrinter.printRecord(headers)
+                            class RowData(val data: Array<Any?>?, val isPoison: Boolean = false, val error: Throwable? = null)
+                            val queue = java.util.concurrent.ArrayBlockingQueue<RowData>(5000)
+                            val consumerLatch = java.util.concurrent.CountDownLatch(1)
+                            val consumerError = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
 
-                                            // Write rows
-                                            var rowCount = 0
-                                            while (rs.next()) {
-                                                if (indicator.isCanceled) {
-                                                    LOG.warn("DataDownloadPlugin: Download canceled by user at row $rowCount")
-                                                    break
-                                                }
-                                                val row = mutableListOf<Any?>()
-                                                for (i in 1..columnCount) {
-                                                    row.add(rs.getObject(i))
-                                                }
-                                                csvPrinter.printRecord(row)
-                                                rowCount++
+                            ApplicationManager.getApplication().executeOnPooledThread {
+                                try {
+                                    if (isXlsx) {
+                                        indicator.text = "Executing query and writing to XLSX..."
+                                        val xlsxFile = File(dir, "${profile.tableName}.xlsx")
+                                        FileOutputStream(xlsxFile).use { fos ->
+                                            BufferedOutputStream(fos, 1024 * 1024).use { bos ->
+                                                val workbook = Workbook(bos, "DatasetDownloader", "1.0")
+                                                var sheetIndex = 1
+                                                var currentSheet = workbook.newWorksheet("data")
                                                 
-                                                if (rowCount % 1000 == 0) {
-                                                    indicator.text = "Writing rows to CSV ($rowCount written)..."
-                                                    if (rowCount % 10000 == 0) {
-                                                        LOG.info("DataDownloadPlugin: Written $rowCount rows to CSV...")
+                                                for (i in 1..columnCount) {
+                                                    currentSheet.value(0, i - 1, meta.getColumnName(i))
+                                                }
+                                                
+                                                var totalRowCount = 0
+                                                var sheetRowNum = 1
+                                                
+                                                while (true) {
+                                                    val rowData = queue.take()
+                                                    if (rowData.isPoison) {
+                                                        if (rowData.error != null) throw rowData.error
+                                                        break
+                                                    }
+                                                    if (indicator.isCanceled) break
+
+                                                    if (sheetRowNum >= 1000000) {
+                                                        sheetIndex++
+                                                        currentSheet = workbook.newWorksheet("data_$sheetIndex")
+                                                        for (i in 1..columnCount) {
+                                                            currentSheet.value(0, i - 1, meta.getColumnName(i))
+                                                        }
+                                                        sheetRowNum = 1
+                                                    }
+                                                    
+                                                    val row = rowData.data!!
+                                                    for (i in 0 until columnCount) {
+                                                        val value = row[i]
+                                                        if (value != null) {
+                                                            when (value) {
+                                                                is Number -> currentSheet.value(sheetRowNum, i, value)
+                                                                is Boolean -> currentSheet.value(sheetRowNum, i, value)
+                                                                is java.time.LocalDateTime -> currentSheet.value(sheetRowNum, i, value)
+                                                                is java.time.LocalDate -> currentSheet.value(sheetRowNum, i, value)
+                                                                is java.util.Date -> currentSheet.value(sheetRowNum, i, value)
+                                                                is String -> currentSheet.value(sheetRowNum, i, value)
+                                                                else -> currentSheet.value(sheetRowNum, i, value.toString())
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    sheetRowNum++
+                                                    totalRowCount++
+                                                    
+                                                    if (totalRowCount % 1000 == 0) {
+                                                        indicator.text = "Writing rows to XLSX ($totalRowCount written)..."
+                                                        if (totalRowCount % 10000 == 0) {
+                                                            LOG.info("DataDownloadPlugin: Written $totalRowCount rows to XLSX...")
+                                                        }
+                                                    }
+                                                }
+                                                workbook.finish()
+                                                LOG.info("DataDownloadPlugin: Finished writing XLSX. Total rows written: $totalRowCount")
+                                            }
+                                        }
+                                    } else {
+                                        indicator.text = "Executing query and writing to CSV..."
+                                        if (csvFile != null) {
+                                            FileWriter(csvFile, StandardCharsets.UTF_8).use { writer ->
+                                                BufferedWriter(writer, 1024 * 1024).use { bw ->
+                                                    bw.write("\uFEFF")
+                                                    CSVPrinter(bw, CSVFormat.DEFAULT).use { csvPrinter ->
+                                                        val headers = mutableListOf<String>()
+                                                        for (i in 1..columnCount) {
+                                                            headers.add(meta.getColumnName(i))
+                                                        }
+                                                        csvPrinter.printRecord(headers)
+
+                                                        var rowCount = 0
+                                                        while (true) {
+                                                            val rowData = queue.take()
+                                                            if (rowData.isPoison) {
+                                                                if (rowData.error != null) throw rowData.error
+                                                                break
+                                                            }
+                                                            if (indicator.isCanceled) break
+                                                            
+                                                            csvPrinter.printRecord(rowData.data!!.toList())
+                                                            rowCount++
+                                                            
+                                                            if (rowCount % 1000 == 0) {
+                                                                indicator.text = "Writing rows to CSV ($rowCount written)..."
+                                                                if (rowCount % 10000 == 0) {
+                                                                    LOG.info("DataDownloadPlugin: Written $rowCount rows to CSV...")
+                                                                }
+                                                            }
+                                                        }
+                                                        LOG.info("DataDownloadPlugin: Finished writing CSV. Total rows written: $rowCount")
                                                     }
                                                 }
                                             }
-                                            LOG.info("DataDownloadPlugin: Finished writing CSV. Total rows written: $rowCount")
                                         }
                                     }
+                                } catch (e: Exception) {
+                                    consumerError.set(e)
+                                    LOG.error("DataDownloadPlugin: Error in consumer thread", e)
+                                } finally {
+                                    consumerLatch.countDown()
                                 }
+                            }
+
+                            try {
+                                var rowCount = 0
+                                while (rs.next()) {
+                                    if (indicator.isCanceled || consumerError.get() != null) {
+                                        LOG.warn("DataDownloadPlugin: Producer stopped (canceled or consumer error).")
+                                        break
+                                    }
+
+                                    val row = Array<Any?>(columnCount) { null }
+                                    for (i in 1..columnCount) {
+                                        val type = columnTypes[i]
+                                        val v = when (type) {
+                                            java.sql.Types.INTEGER, java.sql.Types.TINYINT, java.sql.Types.SMALLINT -> { val v = rs.getInt(i); if (rs.wasNull()) null else v }
+                                            java.sql.Types.BIGINT -> { val v = rs.getLong(i); if (rs.wasNull()) null else v }
+                                            java.sql.Types.FLOAT, java.sql.Types.REAL -> { val v = rs.getFloat(i); if (rs.wasNull()) null else v }
+                                            java.sql.Types.DOUBLE, java.sql.Types.NUMERIC, java.sql.Types.DECIMAL -> { val v = rs.getDouble(i); if (rs.wasNull()) null else v }
+                                            java.sql.Types.BOOLEAN, java.sql.Types.BIT -> { val v = rs.getBoolean(i); if (rs.wasNull()) null else v }
+                                            java.sql.Types.DATE -> { val v = rs.getDate(i); if (rs.wasNull()) null else v.toLocalDate() }
+                                            java.sql.Types.TIMESTAMP -> { val v = rs.getTimestamp(i); if (rs.wasNull()) null else v.toLocalDateTime() }
+                                            else -> rs.getString(i)
+                                        }
+                                        row[i - 1] = v
+                                    }
+                                    queue.put(RowData(row))
+                                    rowCount++
+                                }
+                                queue.put(RowData(null, true, null))
+                            } catch (e: Exception) {
+                                queue.put(RowData(null, true, e))
+                                throw e
+                            }
+
+                            consumerLatch.await()
+                            if (consumerError.get() != null) {
+                                throw consumerError.get()!!
                             }
 
                             try {
