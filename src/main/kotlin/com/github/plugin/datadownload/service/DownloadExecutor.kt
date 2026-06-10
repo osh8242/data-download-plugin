@@ -144,8 +144,12 @@ object DownloadExecutor {
 
                                 // Cache column types to avoid repetitive getType/instanceof checks
                                 val columnTypes = IntArray(columnCount + 1)
+                                val columnNames = Array(columnCount + 1) { "" }
+                                val isNullable = BooleanArray(columnCount + 1)
                                 for (i in 1..columnCount) {
                                     columnTypes[i] = meta.getColumnType(i)
+                                    columnNames[i] = meta.getColumnName(i)
+                                    isNullable[i] = meta.isNullable(i) != java.sql.ResultSetMetaData.columnNoNulls
                                 }
                                 LOG.info("DataDownloadPlugin: Query executed successfully. Column count: $columnCount")
 
@@ -171,7 +175,7 @@ object DownloadExecutor {
                                                     var currentSheet = workbook.newWorksheet("data")
 
                                                     for (i in 1..columnCount) {
-                                                        currentSheet.value(0, i - 1, meta.getColumnName(i))
+                                                        currentSheet.value(0, i - 1, columnNames[i])
                                                     }
 
                                                     var totalRowCount = 0
@@ -189,7 +193,7 @@ object DownloadExecutor {
                                                             sheetIndex++
                                                             currentSheet = workbook.newWorksheet("data_$sheetIndex")
                                                             for (i in 1..columnCount) {
-                                                                currentSheet.value(0, i - 1, meta.getColumnName(i))
+                                                                currentSheet.value(0, i - 1, columnNames[i])
                                                             }
                                                             sheetRowNum = 1
                                                         }
@@ -226,6 +230,7 @@ object DownloadExecutor {
                                                         emptyQueue.put(row) // Return to pool
 
                                                         if (totalRowCount % 1000 == 0) {
+                                                            currentSheet.flush()
                                                             indicator.text =
                                                                 "Writing rows to XLSX ($totalRowCount written)..."
                                                             if (totalRowCount % 10000 == 0) {
@@ -246,7 +251,7 @@ object DownloadExecutor {
                                                         CSVPrinter(bw, CSVFormat.DEFAULT).use { csvPrinter ->
                                                             val headers = mutableListOf<String>()
                                                             for (i in 1..columnCount) {
-                                                                headers.add(meta.getColumnName(i))
+                                                                headers.add(columnNames[i])
                                                             }
                                                             csvPrinter.printRecord(headers)
 
@@ -302,32 +307,32 @@ object DownloadExecutor {
                                             val type = columnTypes[i]
                                             val v = when (type) {
                                                 java.sql.Types.INTEGER, java.sql.Types.TINYINT, java.sql.Types.SMALLINT -> {
-                                                    val v = rs.getInt(i); if (rs.wasNull()) null else v
+                                                    val v = rs.getInt(i); if (isNullable[i] && rs.wasNull()) null else v
                                                 }
 
                                                 java.sql.Types.BIGINT -> {
-                                                    val v = rs.getLong(i); if (rs.wasNull()) null else v
+                                                    val v = rs.getLong(i); if (isNullable[i] && rs.wasNull()) null else v
                                                 }
 
                                                 java.sql.Types.FLOAT, java.sql.Types.REAL -> {
-                                                    val v = rs.getFloat(i); if (rs.wasNull()) null else v
+                                                    val v = rs.getFloat(i); if (isNullable[i] && rs.wasNull()) null else v
                                                 }
 
                                                 java.sql.Types.DOUBLE, java.sql.Types.NUMERIC, java.sql.Types.DECIMAL -> {
-                                                    val v = rs.getDouble(i); if (rs.wasNull()) null else v
+                                                    val v = rs.getDouble(i); if (isNullable[i] && rs.wasNull()) null else v
                                                 }
 
                                                 java.sql.Types.BOOLEAN, java.sql.Types.BIT -> {
-                                                    val v = rs.getBoolean(i); if (rs.wasNull()) null else v
+                                                    val v = rs.getBoolean(i); if (isNullable[i] && rs.wasNull()) null else v
                                                 }
 
                                                 java.sql.Types.DATE -> {
-                                                    val v = rs.getDate(i); if (rs.wasNull()) null else v.toLocalDate()
+                                                    val v = rs.getDate(i); if (isNullable[i] && rs.wasNull()) null else v.toLocalDate()
                                                 }
 
                                                 java.sql.Types.TIMESTAMP -> {
                                                     val v =
-                                                        rs.getTimestamp(i); if (rs.wasNull()) null else v.toLocalDateTime()
+                                                        rs.getTimestamp(i); if (isNullable[i] && rs.wasNull()) null else v.toLocalDateTime()
                                                 }
 
                                                 else -> rs.getString(i)
