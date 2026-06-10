@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.6]
+### Changed
+- Refactored export engine to use a multithreaded Producer-Consumer architecture, maximizing non-blocking IO performance.
+- Eliminated CPU and GC overhead by removing String Pool and implementing Zero-Allocation type mapping via ResultSetMetaData.
+
 ## [1.0.5]
 ### Changed
 - Renamed default Excel worksheet name from "Dataset" to "data".
