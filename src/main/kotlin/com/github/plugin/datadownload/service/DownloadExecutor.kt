@@ -259,7 +259,10 @@ object DownloadExecutor {
                                                                 }
                                                                 if (indicator.isCanceled) break
 
-                                                                csvPrinter.printRecord(*row)
+                                                                for (i in 0 until columnCount) {
+                                                                    csvPrinter.print(row[i])
+                                                                }
+                                                                csvPrinter.println()
                                                                 rowCount++
 
                                                                 emptyQueue.put(row) // Return to pool
