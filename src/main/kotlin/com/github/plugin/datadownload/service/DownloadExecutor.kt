@@ -49,10 +49,10 @@ object DownloadExecutor {
                 }
 
                 val isXlsx = profile.exportFormat.equals("XLSX", ignoreCase = true)
-                val csvFile = if (isXlsx) {
-                    File(dir, "${profile.tableName}_temp.csv")
-                } else {
+                val csvFile = if (!isXlsx) {
                     File(dir, "${profile.tableName}.csv")
+                } else {
+                    null
                 }
                 
                 val sql = "SELECT * FROM ${profile.schemaName}.${profile.tableName}"
@@ -104,7 +104,6 @@ object DownloadExecutor {
                         val remoteConnection = dbConnection.getRemoteConnection()
                         
                         LOG.info("DataDownloadPlugin: Connection established. Executing query...")
-                        indicator.text = "Executing query and writing to CSV..."
                         
                         var stmt: com.intellij.database.remote.jdbc.RemotePreparedStatement? = null
                         var rs: com.intellij.database.remote.jdbc.RemoteResultSet? = null
@@ -130,40 +129,109 @@ object DownloadExecutor {
                             val columnCount = meta.columnCount
                             LOG.info("DataDownloadPlugin: Query executed successfully. Column count: $columnCount")
 
-                            FileWriter(csvFile, StandardCharsets.UTF_8).use { writer ->
-                                if (!isXlsx) {
-                                    writer.write("\uFEFF") // Write UTF-8 BOM for CSV format to support Excel natively
-                                }
-                                CSVPrinter(writer, CSVFormat.DEFAULT).use { csvPrinter ->
+                            if (isXlsx) {
+                                indicator.text = "Executing query and writing to XLSX..."
+                                val xlsxFile = File(dir, "${profile.tableName}.xlsx")
+                                FileOutputStream(xlsxFile).use { fos ->
+                                    val workbook = Workbook(fos, "DatasetDownloader", "1.0")
+                                    var sheetIndex = 1
+                                    var currentSheet = workbook.newWorksheet("data")
+                                    
                                     // Write headers
-                                    val headers = mutableListOf<String>()
                                     for (i in 1..columnCount) {
-                                        headers.add(meta.getColumnName(i))
+                                        currentSheet.value(0, i - 1, meta.getColumnName(i))
                                     }
-                                    csvPrinter.printRecord(headers)
-
+                                    
                                     // Write rows
-                                    var rowCount = 0
+                                    var totalRowCount = 0
+                                    var sheetRowNum = 1
+                                    
                                     while (rs.next()) {
                                         if (indicator.isCanceled) {
-                                            LOG.warn("DataDownloadPlugin: Download canceled by user at row $rowCount")
+                                            LOG.warn("DataDownloadPlugin: Download canceled by user at row $totalRowCount")
                                             break
                                         }
-                                        val row = mutableListOf<Any?>()
-                                        for (i in 1..columnCount) {
-                                            row.add(rs.getObject(i))
-                                        }
-                                        csvPrinter.printRecord(row)
-                                        rowCount++
                                         
-                                        if (rowCount % 1000 == 0) {
-                                            indicator.text = "Writing rows to CSV ($rowCount written)..."
-                                            if (rowCount % 10000 == 0) {
-                                                LOG.info("DataDownloadPlugin: Written $rowCount rows to CSV...")
+                                        // Rollover worksheet every 1,000,000 rows to prevent physical Excel limit crashes
+                                        // Header row is at index 0 of every worksheet. So max data rows is 999,999 per sheet
+                                        if (sheetRowNum >= 1000000) {
+                                            sheetIndex++
+                                            currentSheet = workbook.newWorksheet("data_$sheetIndex")
+                                            
+                                            // Write headers for new sheet
+                                            for (i in 1..columnCount) {
+                                                currentSheet.value(0, i - 1, meta.getColumnName(i))
+                                            }
+                                            sheetRowNum = 1
+                                        }
+                                        
+                                        for (i in 1..columnCount) {
+                                            val value = rs.getObject(i)
+                                            if (value != null) {
+                                                // Handle data type mappings safely
+                                                when (value) {
+                                                    is Number -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    is Boolean -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    is String -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    is java.time.LocalDateTime -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    is java.time.LocalDate -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    is java.util.Date -> currentSheet.value(sheetRowNum, i - 1, value)
+                                                    else -> currentSheet.value(sheetRowNum, i - 1, value.toString())
+                                                }
+                                            }
+                                            // Null value is left empty
+                                        }
+                                        
+                                        sheetRowNum++
+                                        totalRowCount++
+                                        
+                                        if (totalRowCount % 1000 == 0) {
+                                            indicator.text = "Writing rows to XLSX ($totalRowCount written)..."
+                                            if (totalRowCount % 10000 == 0) {
+                                                LOG.info("DataDownloadPlugin: Written $totalRowCount rows to XLSX...")
                                             }
                                         }
                                     }
-                                    LOG.info("DataDownloadPlugin: Finished writing CSV. Total rows written: $rowCount")
+                                    workbook.finish()
+                                    LOG.info("DataDownloadPlugin: Finished writing XLSX. Total rows written: $totalRowCount")
+                                }
+                            } else {
+                                indicator.text = "Executing query and writing to CSV..."
+                                if (csvFile != null) {
+                                    FileWriter(csvFile, StandardCharsets.UTF_8).use { writer ->
+                                        writer.write("\uFEFF") // Write UTF-8 BOM for CSV format to support Excel natively
+                                        CSVPrinter(writer, CSVFormat.DEFAULT).use { csvPrinter ->
+                                            // Write headers
+                                            val headers = mutableListOf<String>()
+                                            for (i in 1..columnCount) {
+                                                headers.add(meta.getColumnName(i))
+                                            }
+                                            csvPrinter.printRecord(headers)
+
+                                            // Write rows
+                                            var rowCount = 0
+                                            while (rs.next()) {
+                                                if (indicator.isCanceled) {
+                                                    LOG.warn("DataDownloadPlugin: Download canceled by user at row $rowCount")
+                                                    break
+                                                }
+                                                val row = mutableListOf<Any?>()
+                                                for (i in 1..columnCount) {
+                                                    row.add(rs.getObject(i))
+                                                }
+                                                csvPrinter.printRecord(row)
+                                                rowCount++
+                                                
+                                                if (rowCount % 1000 == 0) {
+                                                    indicator.text = "Writing rows to CSV ($rowCount written)..."
+                                                    if (rowCount % 10000 == 0) {
+                                                        LOG.info("DataDownloadPlugin: Written $rowCount rows to CSV...")
+                                                    }
+                                                }
+                                            }
+                                            LOG.info("DataDownloadPlugin: Finished writing CSV. Total rows written: $rowCount")
+                                        }
+                                    }
                                 }
                             }
 
@@ -200,32 +268,25 @@ object DownloadExecutor {
                         }
                     }
                     
-                    if (indicator.isCanceled) {
-                        if (csvFile.exists()) csvFile.delete()
-                        showNotification(project, "Download Canceled", "The download operation was canceled.", NotificationType.WARNING)
-                        return
-                    }
-
                     if (isXlsx) {
-                        indicator.text = "Converting CSV to XLSX..."
-                        LOG.info("DataDownloadPlugin: Converting temp CSV to Excel...")
                         val xlsxFile = File(dir, "${profile.tableName}.xlsx")
-                        try {
-                            convertCsvToXlsx(csvFile, xlsxFile)
-                            csvFile.delete() // Remove the intermediate CSV file
-                            LOG.info("DataDownloadPlugin: XLSX conversion completed: [${xlsxFile.absolutePath}]")
+                        if (indicator.isCanceled && xlsxFile.exists()) {
+                            xlsxFile.delete()
+                            showNotification(project, "Download Canceled", "The download operation was canceled.", NotificationType.WARNING)
+                        } else {
+                            LOG.info("DataDownloadPlugin: XLSX download completed: [${xlsxFile.absolutePath}]")
                             showNotification(project, "Download Complete", "Dataset successfully downloaded as Excel to: ${xlsxFile.absolutePath}", NotificationType.INFORMATION, xlsxFile)
-                        } catch (t: Throwable) {
-                            LOG.error("DataDownloadPlugin: Excel conversion failed: ${t.message}", t)
-                            if (xlsxFile.exists()) xlsxFile.delete()
-                            if (csvFile.exists()) csvFile.delete()
-                            ApplicationManager.getApplication().invokeLater {
-                                Messages.showErrorDialog(project, "Excel conversion failed: ${t.message}", "Error")
-                            }
                         }
                     } else {
-                        LOG.info("DataDownloadPlugin: CSV download completed: [${csvFile.absolutePath}]")
-                        showNotification(project, "Download Complete", "Dataset successfully downloaded as CSV to: ${csvFile.absolutePath}", NotificationType.INFORMATION, csvFile)
+                        if (csvFile != null) {
+                            if (indicator.isCanceled && csvFile.exists()) {
+                                csvFile.delete()
+                                showNotification(project, "Download Canceled", "The download operation was canceled.", NotificationType.WARNING)
+                            } else {
+                                LOG.info("DataDownloadPlugin: CSV download completed: [${csvFile.absolutePath}]")
+                                showNotification(project, "Download Complete", "Dataset successfully downloaded as CSV to: ${csvFile.absolutePath}", NotificationType.INFORMATION, csvFile)
+                            }
+                        }
                     }
 
                 } catch (t: Throwable) {
@@ -233,37 +294,14 @@ object DownloadExecutor {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(project, "Failed to download dataset: ${t.message}", "Error")
                     }
-                    if (csvFile.exists()) csvFile.delete()
+                    if (!isXlsx && csvFile != null && csvFile.exists()) csvFile.delete()
+                    if (isXlsx) {
+                        val xlsxFile = File(dir, "${profile.tableName}.xlsx")
+                        if (xlsxFile.exists()) xlsxFile.delete()
+                    }
                 }
             }
         })
-    }
-
-    private fun convertCsvToXlsx(csvFile: File, xlsxFile: File) {
-        FileOutputStream(xlsxFile).use { fos ->
-            val workbook = Workbook(fos, "DatasetDownloader", "1.0")
-            var sheetIndex = 1
-            var currentSheet = workbook.newWorksheet("data")
-            
-            FileReader(csvFile, StandardCharsets.UTF_8).use { reader ->
-                val parser = CSVParser(reader, CSVFormat.DEFAULT)
-                var rowNum = 0
-                for (csvRecord in parser) {
-                    // Rollover worksheet every 1,000,000 rows to prevent physical Excel limit crashes
-                    if (rowNum >= 1000000) {
-                        sheetIndex++
-                        currentSheet = workbook.newWorksheet("data_$sheetIndex")
-                        rowNum = 0
-                    }
-                    for (i in 0 until csvRecord.size()) {
-                        currentSheet.value(rowNum, i, csvRecord.get(i))
-                    }
-                    rowNum++
-                }
-                parser.close()
-            }
-            workbook.finish()
-        }
     }
 
     private fun showNotification(project: Project, title: String, content: String, type: NotificationType, file: File? = null) {
