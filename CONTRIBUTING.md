@@ -44,9 +44,13 @@ gitGraph
 *   대상: `src/` 내의 코드 파일들
 *   명령어: `git commit -m "perf(service): 기능 개선 내용"`
 
-**Step 2. 릴리스를 위한 버전 펌프 커밋**
+**Step 2. 릴리스를 위한 버전 펌프 커밋 및 태그(Tag) 생성**
 *   대상: `build.gradle.kts`, `gradle.properties`, `CHANGELOG.md`
-*   명령어: `git commit -m "chore(build): bump version to 1.0.6"`
+*   명령어: 
+    ```bash
+    git commit -m "chore(build): bump version to 1.0.6"
+    git tag v1.0.6
+    ```
 
 ---
 
