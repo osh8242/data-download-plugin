@@ -197,14 +197,25 @@ object DownloadExecutor {
                                                         for (i in 0 until columnCount) {
                                                             val value = row[i]
                                                             if (value != null) {
-                                                                when (value) {
-                                                                    is Number -> currentSheet.value(sheetRowNum, i, value)
-                                                                    is Boolean -> currentSheet.value(sheetRowNum, i, value)
-                                                                    is java.time.LocalDateTime -> currentSheet.value(sheetRowNum, i, value)
-                                                                    is java.time.LocalDate -> currentSheet.value(sheetRowNum, i, value)
-                                                                    is java.util.Date -> currentSheet.value(sheetRowNum, i, value)
-                                                                    is String -> currentSheet.value(sheetRowNum, i, value)
-                                                                    else -> currentSheet.value(sheetRowNum, i, value.toString())
+                                                                when (columnTypes[i + 1]) {
+                                                                    java.sql.Types.INTEGER, java.sql.Types.TINYINT, java.sql.Types.SMALLINT,
+                                                                    java.sql.Types.BIGINT, java.sql.Types.FLOAT, java.sql.Types.REAL,
+                                                                    java.sql.Types.DOUBLE, java.sql.Types.NUMERIC, java.sql.Types.DECIMAL ->
+                                                                        currentSheet.value(sheetRowNum, i, value as Number)
+
+                                                                    java.sql.Types.BOOLEAN, java.sql.Types.BIT ->
+                                                                        currentSheet.value(sheetRowNum, i, value as Boolean)
+
+                                                                    java.sql.Types.DATE ->
+                                                                        currentSheet.value(sheetRowNum, i, value as java.time.LocalDate)
+
+                                                                    java.sql.Types.TIMESTAMP ->
+                                                                        currentSheet.value(sheetRowNum, i, value as java.time.LocalDateTime)
+
+                                                                    else -> {
+                                                                        if (value is String) currentSheet.value(sheetRowNum, i, value)
+                                                                        else currentSheet.value(sheetRowNum, i, value.toString())
+                                                                    }
                                                                 }
                                                             }
                                                         }
